@@ -69,45 +69,75 @@ def score_resume():
         "matched_skills": matched,
         "missing_skills": missing
     })
+import csv
+from io import StringIO
+from flask import render_template_string
+
 @app.route('/upload-resume', methods=['GET', 'POST'])
 def upload_resume():
     if request.method == 'POST':
         jd = request.form['job_description']
-        file = request.files['resume_file']
+        files = request.files.getlist('resume_files')
 
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
+        if not jd or not files:
+            return "Please upload at least one resume and fill in JD.", 400
 
-            if filename.endswith('.pdf'):
-                resume_text = extract_text_from_pdf(filepath)
-            else:
-                resume_text = extract_text_from_docx(filepath)
+        jd_skills = extract_skills(jd)
+        results = []
 
-            # Use your existing score logic
-            resume_skills = extract_skills(resume_text)
-            jd_skills = extract_skills(jd)
-            matched = list(set(resume_skills).intersection(jd_skills))
-            missing = list(set(jd_skills) - set(resume_skills))
-            score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
+        for file in files:
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
 
-            return jsonify({
-                "match_score": score,
-                "matched_skills": matched,
-                "missing_skills": missing
-            })
+                if filename.endswith('.pdf'):
+                    resume_text = extract_text_from_pdf(filepath)
+                else:
+                    resume_text = extract_text_from_docx(filepath)
 
-        return "Invalid file type", 400
+                resume_skills = extract_skills(resume_text)
+                matched = list(set(resume_skills).intersection(jd_skills))
+                missing = list(set(jd_skills) - set(resume_skills))
+                score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
+
+                results.append({
+                    'filename': filename,
+                    'score': score,
+                    'matched_skills': ", ".join(matched),
+                    'missing_skills': ", ".join(missing)
+                })
+
+        # Render results in a table
+        return render_template_string("""
+        <h2>Results</h2>
+        <table border="1" cellpadding="5">
+            <tr>
+                <th>File</th>
+                <th>Score</th>
+                <th>Matched Skills</th>
+                <th>Missing Skills</th>
+            </tr>
+            {% for row in results %}
+            <tr>
+                <td>{{ row.filename }}</td>
+                <td>{{ row.score }}%</td>
+                <td>{{ row.matched_skills }}</td>
+                <td>{{ row.missing_skills }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <br><a href="/">Upload More</a>
+        """, results=results)
 
     return '''
     <!doctype html>
-    <title>Upload Resume</title>
-    <h1>Upload Resume for Matching</h1>
+    <title>Upload Resumes</title>
+    <h1>Upload Multiple Resumes</h1>
     <form method=post enctype=multipart/form-data>
       <label>Job Description:</label><br>
       <textarea name=job_description rows=5 cols=40></textarea><br><br>
-      <input type=file name=resume_file><br><br>
+      <input type=file name=resume_files multiple><br><br>
       <input type=submit value=Upload>
     </form>
     '''
