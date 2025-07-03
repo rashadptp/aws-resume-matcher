@@ -6,6 +6,9 @@ import os
 import fitz  # PyMuPDF
 from docx import Document
 from werkzeug.utils import secure_filename
+import io
+import csv
+from flask import send_file
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -141,6 +144,20 @@ def upload_resume():
       <input type=submit value=Upload>
     </form>
     '''
+@app.route('/download-csv')
+def download_csv():
+    global results
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["File Name", "Match Score", "Matched Skills", "Missing Skills"])
+    writer.writeheader()
+    writer.writerows(results)
+    output.seek(0)
 
+    return send_file(
+        io.BytesIO(output.getvalue().encode()),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='resume_results.csv'
+    )
 if __name__ == '__main__':
     app.run(debug=True)
