@@ -6,6 +6,8 @@ import os
 import fitz  # PyMuPDF
 from docx import Document
 from werkzeug.utils import secure_filename
+
+app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'docx'}
 
@@ -14,8 +16,6 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
     
-app = Flask(__name__)
-
 # Load spaCy English model
 try:
     nlp = spacy.load("en_core_web_sm")
