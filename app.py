@@ -2,7 +2,18 @@ from flask import Flask, request, jsonify
 import spacy
 import subprocess
 from rapidfuzz import fuzz
+import os
+import fitz  # PyMuPDF
+from docx import Document
+from werkzeug.utils import secure_filename
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'pdf', 'docx'}
 
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    
 app = Flask(__name__)
 
 # Load spaCy English model
@@ -17,6 +28,16 @@ skill_db = [
     "apis", "rest", "sql", "mongodb", "leadership", "aws", "azure", "gcp",
     "data analysis", "machine learning", "pandas", "numpy", "excel"
 ]
+def extract_text_from_pdf(file_path):
+    text = ""
+    with fitz.open(file_path) as doc:
+        for page in doc:
+            text += page.get_text()
+    return text
+
+def extract_text_from_docx(file_path):
+    doc = Document(file_path)
+    return "\n".join([para.text for para in doc.paragraphs])
 
 def extract_skills(text):
     found_skills = set()
@@ -48,6 +69,48 @@ def score_resume():
         "matched_skills": matched,
         "missing_skills": missing
     })
+@app.route('/upload-resume', methods=['GET', 'POST'])
+def upload_resume():
+    if request.method == 'POST':
+        jd = request.form['job_description']
+        file = request.files['resume_file']
+
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+
+            if filename.endswith('.pdf'):
+                resume_text = extract_text_from_pdf(filepath)
+            else:
+                resume_text = extract_text_from_docx(filepath)
+
+            # Use your existing score logic
+            resume_skills = extract_skills(resume_text)
+            jd_skills = extract_skills(jd)
+            matched = list(set(resume_skills).intersection(jd_skills))
+            missing = list(set(jd_skills) - set(resume_skills))
+            score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
+
+            return jsonify({
+                "match_score": score,
+                "matched_skills": matched,
+                "missing_skills": missing
+            })
+
+        return "Invalid file type", 400
+
+    return '''
+    <!doctype html>
+    <title>Upload Resume</title>
+    <h1>Upload Resume for Matching</h1>
+    <form method=post enctype=multipart/form-data>
+      <label>Job Description:</label><br>
+      <textarea name=job_description rows=5 cols=40></textarea><br><br>
+      <input type=file name=resume_file><br><br>
+      <input type=submit value=Upload>
+    </form>
+    '''
 
 if __name__ == '__main__':
     app.run(debug=True)
