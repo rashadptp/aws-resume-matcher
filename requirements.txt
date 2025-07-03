@@ -3,3 +3,5 @@ gunicorn
 spacy
 scikit-learn
 rapidfuzz
+python-docx 
+PyMuPDF
