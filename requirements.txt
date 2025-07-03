@@ -2,3 +2,4 @@ Flask
 gunicorn
 spacy
 scikit-learn
+rapidfuzz
