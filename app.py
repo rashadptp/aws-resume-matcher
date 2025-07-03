@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import spacy
 import subprocess
+from rapidfuzz import fuzz
 
 app = Flask(__name__)
 
@@ -11,33 +12,42 @@ except OSError:
     subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
 
-# Simple skills list (you can expand this or extract from JD)
-def extract_skills(text):
-    doc = nlp(text.lower())
-    # We'll keep it simple: extract nouns + proper nouns as skills
-    skills = set(token.lemma_ for token in doc if token.pos_ in ["NOUN", "PROPN"])
-    return skills
+skill_db = [
+    "python", "django", "flask", "react", "nodejs", "docker", "kubernetes", 
+    "apis", "rest", "sql", "mongodb", "leadership", "aws", "azure", "gcp",
+    "data analysis", "machine learning", "pandas", "numpy", "excel"
+]
 
-@app.route('/score', methods=['POST'])
+def extract_skills(text):
+    found_skills = set()
+    for skill in skill_db:
+        # Fuzzy match threshold (adjust as needed)
+        if fuzz.partial_ratio(skill.lower(), text.lower()) >= 80:
+            found_skills.add(skill.lower())
+    return list(found_skills)
+
+@app.route("/score", methods=["POST"])
 def score_resume():
-    data = request.get_json()
+    data = request.json
     resume_text = data.get("resume", "")
     jd_text = data.get("job_description", "")
 
-    jd_skills = extract_skills(jd_text)
     resume_skills = extract_skills(resume_text)
+    jd_skills = extract_skills(jd_text)
 
-    matched_skills = jd_skills.intersection(resume_skills)
-    missing_skills = jd_skills - resume_skills
+    matched = list(set(resume_skills).intersection(jd_skills))
+    missing = list(set(jd_skills) - set(resume_skills))
 
-    match_score = round((len(matched_skills) / len(jd_skills)) * 100, 2) if jd_skills else 0
+    if jd_skills:
+        score = round((len(matched) / len(jd_skills)) * 100, 2)
+    else:
+        score = 0
 
-    result = {
-        "match_score": match_score,
-        "matched_skills": list(matched_skills),
-        "missing_skills": list(missing_skills)
-    }
-    return jsonify(result)
+    return jsonify({
+        "match_score": score,
+        "matched_skills": matched,
+        "missing_skills": missing
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
