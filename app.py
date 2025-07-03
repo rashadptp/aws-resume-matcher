@@ -75,9 +75,12 @@ def score_resume():
 import csv
 from io import StringIO
 from flask import render_template_string
-
+results = []
 @app.route('/upload-resume', methods=['GET', 'POST'])
 def upload_resume():
+    global results
+    results = []  # clear previous results each time
+
     if request.method == 'POST':
         jd = request.form['job_description']
         files = request.files.getlist('resume_files')
@@ -86,7 +89,6 @@ def upload_resume():
             return "Please upload at least one resume and fill in JD.", 400
 
         jd_skills = extract_skills(jd)
-        results = []
 
         for file in files:
             if file and allowed_file(file.filename):
@@ -105,13 +107,12 @@ def upload_resume():
                 score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
 
                 results.append({
-                    'filename': filename,
-                    'score': score,
-                    'matched_skills': ", ".join(matched),
-                    'missing_skills': ", ".join(missing)
+                    'File Name': filename,
+                    'Match Score': score,
+                    'Matched Skills': ", ".join(matched),
+                    'Missing Skills': ", ".join(missing)
                 })
 
-        # Render results in a table
         return render_template_string("""
         <h2>Results</h2>
         <table border="1" cellpadding="5">
@@ -123,14 +124,17 @@ def upload_resume():
             </tr>
             {% for row in results %}
             <tr>
-                <td>{{ row.filename }}</td>
-                <td>{{ row.score }}%</td>
-                <td>{{ row.matched_skills }}</td>
-                <td>{{ row.missing_skills }}</td>
+                <td>{{ row["File Name"] }}</td>
+                <td>{{ row["Match Score"] }}%</td>
+                <td>{{ row["Matched Skills"] }}</td>
+                <td>{{ row["Missing Skills"] }}</td>
             </tr>
             {% endfor %}
         </table>
-        <br><a href="/">Upload More</a>
+        <br>
+        <a href="/download-csv"><button>Download CSV</button></a>
+        <br><br>
+        <a href="/">Upload More</a>
         """, results=results)
 
     return '''
