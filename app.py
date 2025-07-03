@@ -1,10 +1,15 @@
 from flask import Flask, request, jsonify
 import spacy
+import subprocess
 
 app = Flask(__name__)
 
 # Load spaCy English model
-nlp = spacy.load("en_core_web_sm")
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
 
 # Simple skills list (you can expand this or extract from JD)
 def extract_skills(text):
