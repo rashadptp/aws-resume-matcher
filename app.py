@@ -72,6 +72,31 @@ def score_resume():
         "matched_skills": matched,
         "missing_skills": missing
     })
+
+@app.route("/score-text", methods=["POST"])
+def score_from_text():
+    data = request.json
+    resume_text = data.get("resume", "")
+    jd_text = data.get("job_description", "")
+
+    resume_skills = extract_skills(resume_text)
+    jd_skills = extract_skills(jd_text)
+
+    matched = list(set(resume_skills).intersection(jd_skills))
+    missing = list(set(jd_skills) - set(resume_skills))
+
+    if jd_skills:
+        score = round((len(matched) / len(jd_skills)) * 100, 2)
+    else:
+        score = 0
+
+    return jsonify({
+        "match_score": score,
+        "matched_skills": matched,
+        "missing_skills": missing
+    })
+
+
 import csv
 from io import StringIO
 from flask import render_template_string
