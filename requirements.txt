@@ -5,3 +5,4 @@ scikit-learn
 rapidfuzz
 python-docx 
 PyMuPDF
+flask_cors
