@@ -37,6 +37,7 @@ users = {
         "password": generate_password_hash("password123"),
         "calls_made": 0,
         "call_limit": 10,
+        "name": "Test User"
     }
 }
 
