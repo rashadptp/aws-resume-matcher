@@ -93,6 +93,7 @@ def signup():
 
 
 @app.route("/login", methods=["POST"])
+@app.route("/login", methods=["POST"])
 def login():
     data = request.json
     email = data.get("email")
@@ -103,11 +104,9 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
 
     session["user"] = email
-    # Return user info exactly with keys NextAuth expects
     return jsonify({
         "email": email,
-        "name": user.get("name", "User"),
-        # optionally other fields like image etc
+        "name": user.get("name", "User")
     })
 
 @app.route("/logout", methods=["POST"])
