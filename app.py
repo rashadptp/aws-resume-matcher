@@ -102,8 +102,12 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
 
     session["user"] = email
-    return jsonify({"message": "Login successful", "email": email})
-
+    # Return user info exactly with keys NextAuth expects
+    return jsonify({
+        "email": email,
+        "name": user.get("name", "User"),
+        # optionally other fields like image etc
+    })
 
 @app.route("/logout", methods=["POST"])
 def logout():
