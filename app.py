@@ -22,15 +22,17 @@ ALLOWED_EXTENSIONS = {'pdf', 'docx'}
 USAGE_FILE = "usage.json"
 USAGE_LIMIT = 10
 
+
+
 def load_usage():
     if not os.path.exists(USAGE_FILE):
         return {}
     with open(USAGE_FILE, "r") as f:
         return json.load(f)
 
-def save_usage(usage_data):
+def save_usage(data):
     with open(USAGE_FILE, "w") as f:
-        json.dump(usage_data, f)
+        json.dump(data, f, indent=2)
         
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 users = {
@@ -136,13 +138,14 @@ def score_resume():
 
     # Load and check usage
     usage = load_usage()
-    current_count = usage.get(email, 0)
+    user_data = usage.get(email, {"matches_left": 10})  # default 10 free
 
-    if current_count >= USAGE_LIMIT:
-        return jsonify({"message": "Resume limit reached. Please upgrade."}), 429
+    if user_data["matches_left"] <= 0:
+        return jsonify({"error": "limit"}), 429  # frontend will redirect on this
 
-    # Increment usage
-    usage[email] = current_count + 1
+    # Decrement match count
+    user_data["matches_left"] -= 1
+    usage[email] = user_data
     save_usage(usage)
 
     # Process resume and JD
@@ -157,8 +160,10 @@ def score_resume():
     return jsonify({
         "match_score": score,
         "matched_skills": matched,
-        "missing_skills": missing
+        "missing_skills": missing,
+        "matches_left": user_data["matches_left"]
     })
+
 @app.route("/score-text", methods=["POST"])
 def score_from_text():
     data = request.json
@@ -276,3 +281,17 @@ def download_csv():
     )
 if __name__ == '__main__':
     app.run(debug=True)
+
+@app.route("/payment-success", methods=["POST"])
+def payment_success():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    usage = load_usage()
+    usage[email] = {"matches_left": 500}  # Give 500 matches
+    save_usage(usage)
+
+    return jsonify({"message": "Plan upgraded. 500 matches unlocked."})
