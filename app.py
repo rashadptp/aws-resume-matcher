@@ -279,8 +279,7 @@ def download_csv():
         as_attachment=True,
         download_name='resume_results.csv'
     )
-if __name__ == '__main__':
-    app.run(debug=True)
+
 
 @app.route("/payment-success", methods=["POST"])
 def payment_success():
@@ -295,3 +294,44 @@ def payment_success():
     save_usage(usage)
 
     return jsonify({"message": "Plan upgraded. 500 matches unlocked."})
+
+import stripe
+
+stripe.api_key = "sk_test_51RiFrBH2vTKHOvUiqVCzKGk9p44YnovviLHKeea2DAp4ZBS1k5Cy5UFSXBLbFDcJftZjA5XdXhayTYCdQiLN99iE00pf8ZihrH"  # Use your secret key
+
+@app.route("/create-checkout-session", methods=["POST"])
+def create_checkout_session():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            mode="payment",
+            customer_email=email,
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "inr",  # or "usd"
+                        "product_data": {
+                            "name": "500 Resume Matches Plan",
+                        },
+                        "unit_amount": 19900,  # ₹199.00 in paise
+                    },
+                    "quantity": 1,
+                }
+            ],
+            metadata={"email": email},
+            success_url="http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url="http://localhost:3000/payment-cancelled",
+        )
+        return jsonify({"url": session.url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
