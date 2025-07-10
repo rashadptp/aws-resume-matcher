@@ -34,30 +34,30 @@ with app.app_context():
     db.create_all()
 
 
-def load_usage():
-    if not os.path.exists(USAGE_FILE):
-        return {}
-    with open(USAGE_FILE, "r") as f:
-        return json.load(f)
+# def load_usage():
+#     if not os.path.exists(USAGE_FILE):
+#         return {}
+#     with open(USAGE_FILE, "r") as f:
+#         return json.load(f)
 
-def save_usage(data):
-    with open(USAGE_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+# def save_usage(data):
+#     with open(USAGE_FILE, "w") as f:
+#         json.dump(data, f, indent=2)
         
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-users = {
-    "test@example.com": {
-        "password": generate_password_hash("password123"),
-        "calls_made": 0,
-        "call_limit": 10,
-        "name": "Test User"
-    },
-    "test2@example.com": {
-        "password": generate_password_hash("password123"),
-        "calls_made": 0,
-        "call_limit": 10,
-        "name": "Test User"
-    }
+# users = {
+#     "test@example.com": {
+#         "password": generate_password_hash("password123"),
+#         "calls_made": 0,
+#         "call_limit": 10,
+#         "name": "Test User"
+#     },
+#     "test2@example.com": {
+#         "password": generate_password_hash("password123"),
+#         "calls_made": 0,
+#         "call_limit": 10,
+#         "name": "Test User"
+#     }
     
 }
 
@@ -100,105 +100,142 @@ def signup():
     email = data.get("email")
     password = data.get("password")
 
-    if email in users:
+    if not email or not password:
+        return jsonify({"error": "Missing email or password"}), 400
+
+    existing_user = User.query.filter_by(email=email).first()
+    if existing_user:
         return jsonify({"error": "Email already registered"}), 400
 
-    users[email] = {
-        "password": generate_password_hash(password),
-        "count": 0
-    }
+    hashed_password = generate_password_hash(password)
+    user = User(email=email, password_hash=hashed_password)
+    db.session.add(user)
+    db.session.commit()
 
     session["user"] = email
     return jsonify({"message": "Signup successful", "email": email})
 
 
 @app.route("/login", methods=["POST"])
-@app.route("/login", methods=["POST"])
 def login():
     data = request.json
     email = data.get("email")
     password = data.get("password")
 
-    user = users.get(email)
-    if not user or not check_password_hash(user["password"], password):
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
         return jsonify({"error": "Invalid credentials"}), 401
 
     session["user"] = email
     return jsonify({
-        "email": email,
-        "name": user.get("name", "User")
+        "email": user.email,
+        "name": "User"
     })
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    session.pop("user", None)
-    return jsonify({"message": "Logged out"})
-
-@app.route("/me", methods=["GET"])
-def get_me():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "Not logged in"}), 401
-    return jsonify({"email": user})
-
+    
 
 
 @app.route("/score", methods=["POST"])
 def score_resume():
     data = request.json
     resume_text = data.get("resume", "")
-    filename = data.get("filename", "Unknown")  # Add this in frontend later
+    filename = data.get("filename", "Unknown")
     jd_text = data.get("job_description", "")
     email = data.get("email")
 
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
-    # Load and check usage
-    usage = load_usage()
-    user_data = usage.get(email, {"matches_left": 0, "history": []})
+    # 🔍 Fetch user from DB
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
-
-    # Handle legacy or missing data
-    matches_left = (
-        user_data.get("matches_left")
-        if isinstance(user_data, dict)
-        else max(0, 10 - user_data)  # Legacy format fallback
-    )
-
-    if matches_left <= 0:
+    if user.matches_left <= 0:
         return jsonify({"message": "Resume limit reached. Please upgrade."}), 429
 
-    # Decrement and save usage
-    if isinstance(user_data, dict):
-        usage[email]["matches_left"] = matches_left - 1
-    else:
-        # legacy: convert from numeric count to dict
-        usage[email] = {"matches_left": 9 - user_data}
-    # Skill extraction
+    # ✅ Extract skills and compute score
     resume_skills = extract_skills(resume_text)
     jd_skills = extract_skills(jd_text)
 
     matched = list(set(resume_skills).intersection(jd_skills))
     missing = list(set(jd_skills) - set(resume_skills))
     score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
-        
-    user_data["matches_left"] -= 1
-    user_data.setdefault("history", []).append({
-        "resume_name": filename,
-        "score": score,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-    usage[email] = user_data
-    save_usage(usage)
 
+    # 📉 Decrement match count
+    user.matches_left -= 1
 
+    # 📝 Save history
+    history_entry = MatchHistory(
+        user_id=user.id,
+        resume_name=filename,
+        score=score,
+        timestamp=datetime.utcnow()
+    )
+    db.session.add(history_entry)
+    db.session.commit()
 
     return jsonify({
         "match_score": score,
         "matched_skills": matched,
         "missing_skills": missing
     })
+
+# @app.route("/score", methods=["POST"])
+# def score_resume():
+#     data = request.json
+#     resume_text = data.get("resume", "")
+#     filename = data.get("filename", "Unknown")  # Add this in frontend later
+#     jd_text = data.get("job_description", "")
+#     email = data.get("email")
+
+#     if not email:
+#         return jsonify({"error": "Email is required"}), 400
+
+#     # Load and check usage
+#     usage = load_usage()
+#     user_data = usage.get(email, {"matches_left": 0, "history": []})
+
+
+#     # Handle legacy or missing data
+#     matches_left = (
+#         user_data.get("matches_left")
+#         if isinstance(user_data, dict)
+#         else max(0, 10 - user_data)  # Legacy format fallback
+#     )
+
+#     if matches_left <= 0:
+#         return jsonify({"message": "Resume limit reached. Please upgrade."}), 429
+
+#     # Decrement and save usage
+#     if isinstance(user_data, dict):
+#         usage[email]["matches_left"] = matches_left - 1
+#     else:
+#         # legacy: convert from numeric count to dict
+#         usage[email] = {"matches_left": 9 - user_data}
+#     # Skill extraction
+#     resume_skills = extract_skills(resume_text)
+#     jd_skills = extract_skills(jd_text)
+
+#     matched = list(set(resume_skills).intersection(jd_skills))
+#     missing = list(set(jd_skills) - set(resume_skills))
+#     score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
+        
+#     user_data["matches_left"] -= 1
+#     user_data.setdefault("history", []).append({
+#         "resume_name": filename,
+#         "score": score,
+#         "timestamp": datetime.utcnow().isoformat()
+#     })
+#     usage[email] = user_data
+#     save_usage(usage)
+
+
+
+#     return jsonify({
+#         "match_score": score,
+#         "matched_skills": matched,
+#         "missing_skills": missing
+#     })
 
 @app.route("/score-text", methods=["POST"])
 def score_from_text():
