@@ -137,6 +137,7 @@ def get_me():
 def score_resume():
     data = request.json
     resume_text = data.get("resume", "")
+    filename = data.get("filename", "Unknown")  # Add this in frontend later
     jd_text = data.get("job_description", "")
     email = data.get("email")
 
@@ -145,7 +146,8 @@ def score_resume():
 
     # Load and check usage
     usage = load_usage()
-    user_data = usage.get(email, {})
+    user_data = usage.get(email, {"matches_left": 0, "history": []})
+
 
     # Handle legacy or missing data
     matches_left = (
@@ -163,7 +165,14 @@ def score_resume():
     else:
         # legacy: convert from numeric count to dict
         usage[email] = {"matches_left": 9 - user_data}
-
+        
+    user_data["matches_left"] -= 1
+    user_data.setdefault("history", []).append({
+        "resume_name": filename,
+        "score": score,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    usage[email] = user_data
     save_usage(usage)
 
     # Skill extraction
@@ -348,6 +357,15 @@ def create_checkout_session():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/profile", methods=["GET"])
+def profile():
+    email = request.args.get("email")
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    usage = load_usage()
+    user_data = usage.get(email, {})
+    return jsonify(user_data)
 
 if __name__ == '__main__':
     app.run(debug=True)
