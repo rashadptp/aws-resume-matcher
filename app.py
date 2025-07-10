@@ -13,6 +13,7 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import json
 from datetime import datetime
+from models import db, User, MatchHistory 
 
 
 app = Flask(__name__)
@@ -23,6 +24,14 @@ ALLOWED_EXTENSIONS = {'pdf', 'docx'}
 USAGE_FILE = "usage.json"
 USAGE_LIMIT = 10
 
+# Database setup
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///site.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db.init_app(app)
+
+# Create tables
+with app.app_context():
+    db.create_all()
 
 
 def load_usage():
