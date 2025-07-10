@@ -145,30 +145,39 @@ def score_resume():
 
     # Load and check usage
     usage = load_usage()
-    user_data = usage.get(email, {"matches_left": 10})  # default 10 free
+    user_data = usage.get(email, {})
 
-    if user_data["matches_left"] <= 0:
-        return jsonify({"error": "limit"}), 429  # frontend will redirect on this
+    # Handle legacy or missing data
+    matches_left = (
+        user_data.get("matches_left")
+        if isinstance(user_data, dict)
+        else max(0, 10 - user_data)  # Legacy format fallback
+    )
 
-    # Decrement match count
-    user_data["matches_left"] -= 1
-    usage[email] = user_data
+    if matches_left <= 0:
+        return jsonify({"message": "Resume limit reached. Please upgrade."}), 429
+
+    # Decrement and save usage
+    if isinstance(user_data, dict):
+        usage[email]["matches_left"] = matches_left - 1
+    else:
+        # legacy: convert from numeric count to dict
+        usage[email] = {"matches_left": 9 - user_data}
+
     save_usage(usage)
 
-    # Process resume and JD
+    # Skill extraction
     resume_skills = extract_skills(resume_text)
     jd_skills = extract_skills(jd_text)
 
     matched = list(set(resume_skills).intersection(jd_skills))
     missing = list(set(jd_skills) - set(resume_skills))
-
     score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
 
     return jsonify({
         "match_score": score,
         "matched_skills": matched,
-        "missing_skills": missing,
-        "matches_left": user_data["matches_left"]
+        "missing_skills": missing
     })
 
 @app.route("/score-text", methods=["POST"])
