@@ -165,6 +165,13 @@ def score_resume():
     else:
         # legacy: convert from numeric count to dict
         usage[email] = {"matches_left": 9 - user_data}
+    # Skill extraction
+    resume_skills = extract_skills(resume_text)
+    jd_skills = extract_skills(jd_text)
+
+    matched = list(set(resume_skills).intersection(jd_skills))
+    missing = list(set(jd_skills) - set(resume_skills))
+    score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
         
     user_data["matches_left"] -= 1
     user_data.setdefault("history", []).append({
@@ -175,13 +182,7 @@ def score_resume():
     usage[email] = user_data
     save_usage(usage)
 
-    # Skill extraction
-    resume_skills = extract_skills(resume_text)
-    jd_skills = extract_skills(jd_text)
 
-    matched = list(set(resume_skills).intersection(jd_skills))
-    missing = list(set(jd_skills) - set(resume_skills))
-    score = round((len(matched) / len(jd_skills)) * 100, 2) if jd_skills else 0
 
     return jsonify({
         "match_score": score,
