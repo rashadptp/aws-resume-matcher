@@ -7,3 +7,4 @@ python-docx
 PyMuPDF
 flask_cors
 stripe
+flask_sqlalchemy
