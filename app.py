@@ -41,7 +41,14 @@ users = {
         "calls_made": 0,
         "call_limit": 10,
         "name": "Test User"
+    },
+    "test2@example.com": {
+        "password": generate_password_hash("password123"),
+        "calls_made": 0,
+        "call_limit": 10,
+        "name": "Test User"
     }
+    
 }
 
 def allowed_file(filename):
