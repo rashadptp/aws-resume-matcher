@@ -267,9 +267,6 @@ from flask import render_template_string
 results = []
 @app.route('/upload-resume', methods=['GET', 'POST'])
 def upload_resume():
-    global results
-    results = []  # clear previous results each time
-
     if request.method == 'POST':
         jd = request.form['job_description']
         files = request.files.getlist('resume_files')
@@ -278,6 +275,7 @@ def upload_resume():
             return "Please upload at least one resume and fill in JD.", 400
 
         jd_skills = extract_skills(jd)
+        results = []
 
         for file in files:
             if file and allowed_file(file.filename):
@@ -302,6 +300,13 @@ def upload_resume():
                     'Missing Skills': ", ".join(missing)
                 })
 
+        # 🧠 Store results in session or re-render as HTML with download option
+        output = StringIO()
+        writer = csv.DictWriter(output, fieldnames=["File Name", "Match Score", "Matched Skills", "Missing Skills"])
+        writer.writeheader()
+        writer.writerows(results)
+        csv_data = output.getvalue()
+
         return render_template_string("""
         <h2>Results</h2>
         <table border="1" cellpadding="5">
@@ -321,10 +326,13 @@ def upload_resume():
             {% endfor %}
         </table>
         <br>
-        <a href="/download-csv"><button>Download CSV</button></a>
+        <form method="post" action="/download-csv">
+            <input type="hidden" name="csv" value="{{ csv }}">
+            <button type="submit">Download CSV</button>
+        </form>
         <br><br>
         <a href="/">Upload More</a>
-        """, results=results)
+        """, results=results, csv=csv_data)
 
     return '''
     <!doctype html>
@@ -337,22 +345,18 @@ def upload_resume():
       <input type=submit value=Upload>
     </form>
     '''
-@app.route('/download-csv')
+@app.route('/download-csv', methods=['POST'])
 def download_csv():
-    global results
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=["File Name", "Match Score", "Matched Skills", "Missing Skills"])
-    writer.writeheader()
-    writer.writerows(results)
-    output.seek(0)
+    csv_data = request.form.get("csv")
+    if not csv_data:
+        return "No CSV data provided", 400
 
     return send_file(
-        io.BytesIO(output.getvalue().encode()),
+        io.BytesIO(csv_data.encode()),
         mimetype='text/csv',
         as_attachment=True,
         download_name='resume_results.csv'
     )
-
 
 @app.route("/payment-success", methods=["POST"])
 def payment_success():
@@ -362,9 +366,12 @@ def payment_success():
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
-    usage = load_usage()
-    usage[email] = {"matches_left": 500}  # Give 500 matches
-    save_usage(usage)
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.matches_left = 500  # Upgrade plan
+    db.session.commit()
 
     return jsonify({"message": "Plan upgraded. 500 matches unlocked."})
 
