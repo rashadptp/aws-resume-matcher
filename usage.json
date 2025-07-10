@@ -1,1 +1,12 @@
-{}
+{
+  "user@example.com": {
+    "matches_left": 480,
+    "history": [
+      {
+        "resume_name": "resume1.pdf",
+        "score": 82,
+        "timestamp": "2025-07-05T13:00:00Z"
+      }
+    ]
+  }
+}
