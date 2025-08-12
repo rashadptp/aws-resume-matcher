@@ -7,8 +7,12 @@ db = SQLAlchemy()
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(128), nullable=True)
     matches_left = db.Column(db.Integer, default=10)
+    auth_provider = db.Column(db.String(50), nullable=True,default='email')  # e.g., 'google', 'github', etc.
+    is_verified = db.Column(db.Boolean, default=False)
+    verification_token = db.Column(db.String(120), unique=True, nullable=True)
+    token_expiration = db.Column(db.DateTime, nullable=True)
 
     match_history = db.relationship("MatchHistory", backref="user", lazy=True)
 
