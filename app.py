@@ -14,6 +14,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import json
 from datetime import datetime
 from models import db, User, MatchHistory 
+from flask_mail import Message,Mail # <-- Add this import
+
 
 
 app = Flask(__name__)
@@ -24,6 +26,13 @@ ALLOWED_EXTENSIONS = {'pdf', 'docx'}
 USAGE_FILE = "usage.json"
 USAGE_LIMIT = 10
 
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'ptprashad@gmail.com'  # replace
+app.config['MAIL_PASSWORD'] = 'kayz xpyn vbzj gieo'     # replace with app password
+app.config['MAIL_DEFAULT_SENDER'] = 'ptprashad@gmail.com'  # same as MAIL_USERNAME
+mail = Mail(app)
 # Database setup
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///site.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -94,43 +103,43 @@ def extract_skills(text):
         if fuzz.partial_ratio(skill.lower(), text.lower()) >= 80:
             found_skills.add(skill.lower())
     return list(found_skills)
-@app.route("/signup", methods=["POST"])
-def signup():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
+# @app.route("/signup", methods=["POST"])
+# def signup():
+#     data = request.json
+#     email = data.get("email")
+#     password = data.get("password")
 
-    if not email or not password:
-        return jsonify({"error": "Missing email or password"}), 400
+#     if not email or not password:
+#         return jsonify({"error": "Missing email or password"}), 400
 
-    existing_user = User.query.filter_by(email=email).first()
-    if existing_user:
-        return jsonify({"error": "Email already registered"}), 400
+#     existing_user = User.query.filter_by(email=email).first()
+#     if existing_user:
+#         return jsonify({"error": "Email already registered"}), 400
 
-    hashed_password = generate_password_hash(password)
-    user = User(email=email, password_hash=hashed_password)
-    db.session.add(user)
-    db.session.commit()
+#     hashed_password = generate_password_hash(password)
+#     user = User(email=email, password_hash=hashed_password)
+#     db.session.add(user)
+#     db.session.commit()
 
-    session["user"] = email
-    return jsonify({"message": "Signup successful", "email": email})
+#     session["user"] = email
+#     return jsonify({"message": "Signup successful", "email": email})
 
 
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
+# @app.route("/login", methods=["POST"])
+# def login():
+#     data = request.json
+#     email = data.get("email")
+#     password = data.get("password")
 
-    user = User.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
-        return jsonify({"error": "Invalid credentials"}), 401
+#     user = User.query.filter_by(email=email).first()
+#     if not user or not user.check_password(password):
+#         return jsonify({"error": "Invalid credentials"}), 401
 
-    session["user"] = email
-    return jsonify({
-        "email": user.email,
-        "name": "User"
-    })
+#     session["user"] = email
+#     return jsonify({
+#         "email": user.email,
+#         "name": "User"
+#     })
     
 
 
@@ -165,6 +174,7 @@ def score_resume():
     user.matches_left -= 1
 
     # 📝 Save history
+    print(f"User: {user.email}, Resume Name: {filename}, Score: {score}")
     history_entry = MatchHistory(
         user_id=user.id,
         resume_name=filename,
@@ -370,7 +380,7 @@ def payment_success():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    user.matches_left = 500  # Upgrade plan
+    user.matches_left = user.matches_left + 500  # Upgrade plan
     db.session.commit()
 
     return jsonify({"message": "Plan upgraded. 500 matches unlocked."})
@@ -383,9 +393,22 @@ stripe.api_key = "sk_test_51RiFrBH2vTKHOvUiqVCzKGk9p44YnovviLHKeea2DAp4ZBS1k5Cy5
 def create_checkout_session():
     data = request.json
     email = data.get("email")
+    plan = data.get("plan")
 
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
+    if not email or not plan:
+        return jsonify({"error": "Email and plan are required"}), 400
+
+    # 🎯 Define pricing for each plan
+    plan_options = {
+        "100": {"amount": 9900, "name": "100 Resume Matches Plan", "matches": 100},
+        "500": {"amount": 19900, "name": "500 Resume Matches Plan", "matches": 500},
+        "unlimited": {"amount": 49900, "name": "Unlimited Resume Matches Plan", "matches": 1000},
+    }
+
+    if plan not in plan_options:
+        return jsonify({"error": "Invalid plan selected"}), 400
+
+    plan_data = plan_options[plan]
 
     try:
         session = stripe.checkout.Session.create(
@@ -395,16 +418,18 @@ def create_checkout_session():
             line_items=[
                 {
                     "price_data": {
-                        "currency": "inr",  # or "usd"
-                        "product_data": {
-                            "name": "500 Resume Matches Plan",
-                        },
-                        "unit_amount": 19900,  # ₹199.00 in paise
+                        "currency": "inr",
+                        "product_data": {"name": plan_data["name"]},
+                        "unit_amount": plan_data["amount"],
                     },
                     "quantity": 1,
                 }
             ],
-            metadata={"email": email},
+            metadata={
+                "email": email,
+                "matches": plan_data["matches"],
+                "plan_id": plan,
+            },
             success_url="http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url="http://localhost:3000/payment-cancelled",
         )
@@ -418,9 +443,202 @@ def profile():
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
-    usage = load_usage()
-    user_data = usage.get(email, {})
-    return jsonify(user_data)
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
+    # Fetch match history
+    history = [
+        {
+            "resume_name": h.resume_name,
+            "score": h.score,
+            "timestamp": h.timestamp.isoformat() if h.timestamp else None,
+        }
+        for h in user.match_history
+    ]
+
+    return jsonify({
+        "email": user.email,
+        "remaining": user.matches_left,
+        "used": len(history),
+        "history": history
+    })
+
+@app.route("/google-login", methods=["POST"])
+def google_login():
+    try:
+        data = request.json
+        email = data.get("email")
+        name = data.get("name", "User")
+
+        if not email:
+            return jsonify({"error": "Email is required"}), 400
+
+        user = User.query.filter_by(email=email).first()
+
+        if not user:
+            # Create user without password for Google auth
+            user = User(
+                email=email, 
+                matches_left=10,
+                auth_provider='google'
+            )
+            db.session.add(user)
+            db.session.commit()
+
+        # Return user data
+        return jsonify({
+            "email": user.email,
+            "name": name,
+            "remaining": user.matches_left,
+            "history": [h.to_dict() for h in user.match_history] if hasattr(user, 'match_history') else [],
+        })
+
+    except Exception as e:
+        print(f"Error in google_login: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+from flask import jsonify, request, session
+from werkzeug.security import generate_password_hash, check_password_hash
+import uuid
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_mail import Mail, Message
+from flask_cors import CORS
+from werkzeug.security import generate_password_hash
+from datetime import datetime, timedelta
+import uuid
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email or not password:
+        return jsonify({"error": "Missing email or password"}), 400
+
+    existing_user = User.query.filter_by(email=email).first()
+    if existing_user:
+        return jsonify({"error": "Email already registered"}), 400
+
+    # Generate verification token with expiration (24 hours)
+    verification_token = str(uuid.uuid4())
+    token_expiration = datetime.utcnow() + timedelta(hours=24)
+
+    hashed_password = generate_password_hash(password)
+    user = User(
+        email=email,
+        password_hash=hashed_password,
+        is_verified=False,
+        verification_token=verification_token,
+        token_expiration=token_expiration
+    )
+    
+    db.session.add(user)
+    db.session.commit()
+
+    # Send verification email
+    verification_url = f"http://localhost:3000/verify-email?token={verification_token}"
+    msg = Message(
+        subject="Verify Your Email",
+        recipients=[email],
+        html=f"""
+        <h2>Please verify your email</h2>
+        <p>Click the link below to verify your email address:</p>
+        <a href="{verification_url}">{verification_url}</a>
+        <p>This link will expire in 24 hours.</p>
+        """
+    )
+    mail.send(msg)
+
+    return jsonify({
+        "message": "Signup successful. Please check your email to verify your account.",
+        "email": email
+    })
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+
+    user = User.query.filter_by(email=email).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    if not user.is_verified:
+        return jsonify({
+            "error": "Email not verified",
+            "message": "Please check your email for the verification link",
+            "resend_verification": True
+        }), 403
+
+    session["user"] = email
+    return jsonify({
+        "email": user.email,
+        "name": "User"
+    })
+
+
+@app.route("/verify-email", methods=["POST"])
+def verify_email():
+    token = request.json.get("token")
+    if not token:
+        return jsonify({"error": "Token is required"}), 400
+
+    user = User.query.filter_by(verification_token=token).first()
+    
+    # Check if token exists and isn't expired
+    if not user or user.token_expiration < datetime.utcnow():
+        return jsonify({"error": "Invalid or expired token"}), 400
+
+    user.is_verified = True
+    user.verification_token = None
+    user.token_expiration = None
+    db.session.commit()
+
+    return jsonify({"message": "Email verified successfully"})
+
+
+@app.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    email = request.json.get("email")
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if user.is_verified:
+        return jsonify({"error": "Email is already verified"}), 400
+
+    # Generate new token and expiration
+    new_token = str(uuid.uuid4())
+    new_expiration = datetime.utcnow() + timedelta(hours=24)
+
+    user.verification_token = new_token
+    user.token_expiration = new_expiration
+    db.session.commit()
+
+    # Send new verification email
+    verification_url = f"http://your-frontend-domain.com/verify-email?token={new_token}"
+    msg = Message(
+        subject="Verify Your Email",
+        recipients=[email],
+        html=f"""
+        <h2>Please verify your email</h2>
+        <p>Click the link below to verify your email address:</p>
+        <a href="{verification_url}">{verification_url}</a>
+        <p>This link will expire in 24 hours.</p>
+        """
+    )
+    mail.send(msg)
+
+    return jsonify({"message": "Verification email resent successfully"})
+        
 if __name__ == '__main__':
     app.run(debug=True)
