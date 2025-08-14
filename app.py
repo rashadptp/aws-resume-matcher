@@ -430,8 +430,8 @@ def create_checkout_session():
                 "matches": plan_data["matches"],
                 "plan_id": plan,
             },
-            success_url="http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="http://localhost:3000/payment-cancelled",
+            success_url="https://resume-matcher-ai4.vercel.app/payment-success?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url="https://resume-matcher-ai4.vercel.app/payment-cancelled",
         )
         return jsonify({"url": session.url})
     except Exception as e:
@@ -540,7 +540,7 @@ def signup():
     db.session.commit()
 
     # Send verification email
-    verification_url = f"http://localhost:3000/verify-email?token={verification_token}"
+    verification_url = f"https://resume-matcher-ai4.vercel.app/verify-email?token={verification_token}"
     msg = Message(
         subject="Verify Your Email",
         recipients=[email],
@@ -642,6 +642,7 @@ def resend_verification():
         
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
