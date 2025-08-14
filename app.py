@@ -19,7 +19,7 @@ from flask_mail import Message,Mail # <-- Add this import
 
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True,origins=["http://localhost:3000"])  # Important for cookies/session
+CORS(app, supports_credentials=True,origins=["http://localhost:3000" ,"https://resume-matcher-ai4.vercel.app"])  # Important for cookies/session
 app.secret_key = "supersecretkey"
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'docx'}
@@ -642,5 +642,6 @@ def resend_verification():
         
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
