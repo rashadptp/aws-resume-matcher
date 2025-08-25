@@ -29,8 +29,8 @@ USAGE_LIMIT = 10
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'ptprashad@gmail.com'  # replace
-app.config['MAIL_PASSWORD'] = 'kayz xpyn vbzj gieo'     # replace with app password
+app.config['MAIL_USERNAME'] = '*'  # replace
+app.config['MAIL_PASSWORD'] = '*'     # replace with app password
 app.config['MAIL_DEFAULT_SENDER'] = 'ptprashad@gmail.com'  # same as MAIL_USERNAME
 mail = Mail(app)
 # Database setup
@@ -642,6 +642,7 @@ def resend_verification():
         
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
